@@ -8,6 +8,15 @@ import (
 	"k8s.io/client-go/pkg/api/v1"
 )
 
+type TimePeriod struct {
+	From time.Time
+	To   time.Time
+}
+
+func (tp TimePeriod) Includes(time time.Time) bool {
+	return time.After(tp.From) && time.Before(tp.To)
+}
+
 // NewPod returns a new pod instance for testing purposes.
 func NewPod(namespace, name string) v1.Pod {
 	return v1.Pod{

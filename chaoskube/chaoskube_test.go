@@ -24,8 +24,9 @@ func TestNew(t *testing.T) {
 	annotations, _ := labels.Parse("baz=waldo")
 	namespaces, _ := labels.Parse("qux")
 	excludedWeekdays := []time.Weekday{time.Friday}
+	excludedTimePeriod := util.TimePeriod{From: ThankGodItsFriday{}.Now(), To: ThankGodItsFriday{}.Now()}
 
-	chaoskube := New(client, labelSelector, annotations, namespaces, excludedWeekdays, time.UTC, logger, false, 42)
+	chaoskube := New(client, labelSelector, annotations, namespaces, excludedWeekdays, []util.TimePeriod{excludedTimePeriod}, time.UTC, logger, false, 42)
 
 	if chaoskube == nil {
 		t.Errorf("expected Chaoskube but got nothing")
@@ -55,6 +56,14 @@ func TestNew(t *testing.T) {
 		t.Errorf("expected %s, got %s", time.Friday.String(), chaoskube.ExcludedWeekdays[0].String())
 	}
 
+	if len(chaoskube.ExcludedTimePeriods) != 1 {
+		t.Fatalf("expected %d, got %d", 1, len(chaoskube.ExcludedTimePeriods))
+	}
+
+	if chaoskube.ExcludedTimePeriods[0] != excludedTimePeriod {
+		t.Errorf("expected %#v, got %#v", excludedTimePeriod, chaoskube.ExcludedTimePeriods[0])
+	}
+
 	if chaoskube.Timezone != time.UTC {
 		t.Errorf("expected %#v, got %#v", time.UTC, chaoskube.Timezone)
 	}
@@ -74,7 +83,7 @@ func TestNew(t *testing.T) {
 
 // TestCandidates tests the set of pods available for termination
 func TestCandidates(t *testing.T) {
-	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, false, 0)
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 0)
 
 	validateCandidates(t, chaoskube, []map[string]string{
 		{"namespace": "default", "name": "foo"},
@@ -90,7 +99,7 @@ func TestCandidatesLabelSelector(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chaoskube := setup(t, selector, labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, false, 0)
+	chaoskube := setup(t, selector, labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 0)
 
 	validateCandidates(t, chaoskube, []map[string]string{
 		{"namespace": "default", "name": "foo"},
@@ -104,7 +113,7 @@ func TestCandidatesExcludingLabelSelector(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chaoskube := setup(t, selector, labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, false, 0)
+	chaoskube := setup(t, selector, labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 0)
 
 	validateCandidates(t, chaoskube, []map[string]string{
 		{"namespace": "testing", "name": "bar"},
@@ -119,7 +128,7 @@ func TestCandidatesAnnotationSelector(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chaoskube := setup(t, labels.Everything(), selector, labels.Everything(), []time.Weekday{}, time.UTC, false, 0)
+	chaoskube := setup(t, labels.Everything(), selector, labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 0)
 
 	validateCandidates(t, chaoskube, []map[string]string{
 		{"namespace": "default", "name": "foo"},
@@ -133,7 +142,7 @@ func TestCandidatesExcludingAnnotationSelector(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chaoskube := setup(t, labels.Everything(), selector, labels.Everything(), []time.Weekday{}, time.UTC, false, 0)
+	chaoskube := setup(t, labels.Everything(), selector, labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 0)
 
 	validateCandidates(t, chaoskube, []map[string]string{
 		{"namespace": "testing", "name": "bar"},
@@ -163,7 +172,7 @@ func TestCandidatesNamespaces(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		chaoskube := setup(t, labels.Everything(), labels.Everything(), namespaces, []time.Weekday{}, time.UTC, false, 0)
+		chaoskube := setup(t, labels.Everything(), labels.Everything(), namespaces, []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 0)
 
 		validateCandidates(t, chaoskube, test.pods)
 	}
@@ -171,7 +180,7 @@ func TestCandidatesNamespaces(t *testing.T) {
 
 // TestVictim tests that a pod is chosen from the candidates
 func TestVictim(t *testing.T) {
-	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, false, 2000)
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 2000)
 
 	validateVictim(t, chaoskube, map[string]string{
 		"namespace": "default", "name": "foo",
@@ -180,7 +189,7 @@ func TestVictim(t *testing.T) {
 
 // TestAnotherVictim tests that the chosen victim is different for another seed
 func TestAnotherVictim(t *testing.T) {
-	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, false, 4000)
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 4000)
 
 	validateVictim(t, chaoskube, map[string]string{
 		"namespace": "testing", "name": "bar",
@@ -195,7 +204,7 @@ func TestAnotherVictimRespectsLabelSelector(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chaoskube := setup(t, selector, labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, false, 0)
+	chaoskube := setup(t, selector, labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 0)
 
 	validateVictim(t, chaoskube, map[string]string{
 		"namespace": "default", "name": "foo",
@@ -204,7 +213,7 @@ func TestAnotherVictimRespectsLabelSelector(t *testing.T) {
 
 // TestNoVictimReturnsError tests that on missing victim it returns a known error
 func TestNoVictimReturnsError(t *testing.T) {
-	chaoskube := New(fake.NewSimpleClientset(), labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, logger, false, 0)
+	chaoskube := New(fake.NewSimpleClientset(), labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, logger, false, 0)
 
 	if _, err := chaoskube.Victim(); err != ErrPodNotFound {
 		t.Errorf("expected %#v, got %#v", ErrPodNotFound, err)
@@ -213,7 +222,7 @@ func TestNoVictimReturnsError(t *testing.T) {
 
 // TestDeletePod tests deleting a particular pod
 func TestDeletePod(t *testing.T) {
-	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, false, 0)
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 0)
 
 	victim := util.NewPod("default", "foo")
 
@@ -230,7 +239,7 @@ func TestDeletePod(t *testing.T) {
 
 // TestDeletePodDryRun tests that enabled dry run doesn't delete the pod
 func TestDeletePodDryRun(t *testing.T) {
-	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, true, 0)
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, true, 0)
 
 	victim := util.NewPod("default", "foo")
 
@@ -246,7 +255,7 @@ func TestDeletePodDryRun(t *testing.T) {
 
 // TestTerminateVictim tests that the correct victim pod is chosen and deleted
 func TestTerminateVictim(t *testing.T) {
-	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, false, 0)
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, false, 0)
 
 	if err := chaoskube.TerminateVictim(); err != nil {
 		t.Fatal(err)
@@ -257,7 +266,7 @@ func TestTerminateVictim(t *testing.T) {
 
 // TestTerminateVictimRespectsExcludedWeekday tests that no victim is terminated when the current weekday is excluded.
 func TestTerminateVictimRespectsExcludedWeekdays(t *testing.T) {
-	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{time.Friday}, time.UTC, false, 0)
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{time.Friday}, []util.TimePeriod{}, time.UTC, false, 0)
 
 	// simulate that it's a Friday in our test (UTC).
 	chaoskube.Now = ThankGodItsFriday{}.Now
@@ -272,16 +281,18 @@ func TestTerminateVictimRespectsExcludedWeekdays(t *testing.T) {
 
 // TestTerminateVictimOnNonExcludedWeekdays tests that victim is terminated when weekday filter doesn't match.
 func TestTerminateVictimOnNonExcludedWeekdays(t *testing.T) {
-	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{time.Friday}, time.UTC, false, 0)
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{time.Friday}, []util.TimePeriod{}, time.UTC, false, 2000)
 
-	// simulate that it's a Saturday in our test (UTC).
+	// simulate that it's a Saturday in our test.
 	chaoskube.Now = func() time.Time { return ThankGodItsFriday{}.Now().Add(24 * time.Hour) }
 
 	if err := chaoskube.TerminateVictim(); err != nil {
 		t.Fatal(err)
 	}
 
-	validateCandidatesCount(t, chaoskube, 1)
+	validateCandidates(t, chaoskube, []map[string]string{
+		{"namespace": "testing", "name": "bar"},
+	})
 }
 
 // TestTerminateVictimRespectsTimezone tests that victim is terminated when weekday filter doesn't match due to different timezone.
@@ -291,7 +302,7 @@ func TestTerminateVictimRespectsTimezone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{time.Friday}, timezone, false, 0)
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{time.Friday}, []util.TimePeriod{}, timezone, false, 0)
 
 	// simulate that it's a Friday in our test (UTC). However, in Australia it's already Saturday.
 	chaoskube.Now = ThankGodItsFriday{}.Now
@@ -303,10 +314,86 @@ func TestTerminateVictimRespectsTimezone(t *testing.T) {
 	validateCandidatesCount(t, chaoskube, 1)
 }
 
+//
+
+// TODO
+func TestTerminateVictimRespectsExcludedTimePeriods(t *testing.T) {
+	fridayAfternoon := util.TimePeriod{
+		From: ThankGodItsFriday{}.Now().Add(-1 * time.Hour),
+		To:   ThankGodItsFriday{}.Now().Add(+1 * time.Hour),
+	}
+
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{fridayAfternoon}, time.UTC, false, 2000)
+
+	// simulate that it's a Friday in our test.
+	chaoskube.Now = ThankGodItsFriday{}.Now
+
+	if err := chaoskube.TerminateVictim(); err != nil {
+		t.Fatal(err)
+	}
+
+	validateCandidates(t, chaoskube, []map[string]string{
+		{"namespace": "default", "name": "foo"},
+		{"namespace": "testing", "name": "bar"},
+	})
+
+	validateLog(t, msgTimePeriodExcluded)
+}
+
+// TODO
+func TestTerminateVictimRespectsExcludedMultipleTimePeriods(t *testing.T) {
+	fridayMorning := util.TimePeriod{
+		From: ThankGodItsFriday{}.Now().Add(-7 * time.Hour),
+		To:   ThankGodItsFriday{}.Now().Add(-6 * time.Hour),
+	}
+
+	fridayAfternoon := util.TimePeriod{
+		From: ThankGodItsFriday{}.Now().Add(-1 * time.Hour),
+		To:   ThankGodItsFriday{}.Now().Add(+1 * time.Hour),
+	}
+
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{fridayMorning, fridayAfternoon}, time.UTC, false, 2000)
+
+	// simulate that it's a Friday in our test.
+	chaoskube.Now = ThankGodItsFriday{}.Now
+
+	if err := chaoskube.TerminateVictim(); err != nil {
+		t.Fatal(err)
+	}
+
+	validateCandidates(t, chaoskube, []map[string]string{
+		{"namespace": "default", "name": "foo"},
+		{"namespace": "testing", "name": "bar"},
+	})
+
+	validateLog(t, msgTimePeriodExcluded)
+}
+
+// TestTerminateVictimOnNonExcludedTimePeriods
+func TestTerminateVictimOnNonActiveTime(t *testing.T) {
+	fridayAfternoon := util.TimePeriod{
+		From: ThankGodItsFriday{}.Now().Add(-1 * time.Hour),
+		To:   ThankGodItsFriday{}.Now().Add(+1 * time.Hour),
+	}
+
+	chaoskube := setup(t, labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{time.Friday}, []util.TimePeriod{fridayAfternoon}, time.UTC, false, 0)
+
+	// simulate that it's a Saturday in our test (UTC).
+	chaoskube.Now = func() time.Time { return ThankGodItsFriday{}.Now().Add(24 * time.Hour) }
+
+	if err := chaoskube.TerminateVictim(); err != nil {
+		t.Fatal(err)
+	}
+
+	validateCandidatesCount(t, chaoskube, 1)
+}
+
+//
+
 // TestTerminateNoVictimLogsInfo tests that missing victim prints a log message
 func TestTerminateNoVictimLogsInfo(t *testing.T) {
 	logOutput.Reset()
-	chaoskube := New(fake.NewSimpleClientset(), labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, time.UTC, logger, false, 0)
+	chaoskube := New(fake.NewSimpleClientset(), labels.Everything(), labels.Everything(), labels.Everything(), []time.Weekday{}, []util.TimePeriod{}, time.UTC, logger, false, 0)
 
 	if err := chaoskube.TerminateVictim(); err != nil {
 		t.Fatal(err)
@@ -372,7 +459,7 @@ func validateLog(t *testing.T, msg string) {
 	}
 }
 
-func setup(t *testing.T, labelSelector labels.Selector, annotations labels.Selector, namespaces labels.Selector, excludedWeekdays []time.Weekday, timezone *time.Location, dryRun bool, seed int64) *Chaoskube {
+func setup(t *testing.T, labelSelector labels.Selector, annotations labels.Selector, namespaces labels.Selector, excludedWeekdays []time.Weekday, excludedTimePeriod []util.TimePeriod, timezone *time.Location, dryRun bool, seed int64) *Chaoskube {
 	pods := []v1.Pod{
 		util.NewPod("default", "foo"),
 		util.NewPod("testing", "bar"),
@@ -388,7 +475,7 @@ func setup(t *testing.T, labelSelector labels.Selector, annotations labels.Selec
 
 	logOutput.Reset()
 
-	return New(client, labelSelector, annotations, namespaces, excludedWeekdays, timezone, logger, dryRun, seed)
+	return New(client, labelSelector, annotations, namespaces, excludedWeekdays, excludedTimePeriod, timezone, logger, dryRun, seed)
 }
 
 // ThankGodItsFriday is a helper struct that contains a Now() function that always returns a Friday.

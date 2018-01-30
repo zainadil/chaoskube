@@ -5,6 +5,38 @@ import (
 	"time"
 )
 
+func TestTimePeriodIncludes(t *testing.T) {
+	for _, tc := range []struct {
+		pointInTime time.Time
+		timePeriod  TimePeriod
+		expected    bool
+	}{
+		// it's included
+		{
+			time.Now(),
+			TimePeriod{From: time.Now().Add(-1 * time.Minute), To: time.Now().Add(+1 * time.Minute)},
+			true,
+		},
+		// it's before
+		{
+			time.Now().Add(-2 * time.Minute),
+			TimePeriod{From: time.Now().Add(-1 * time.Minute), To: time.Now().Add(+1 * time.Minute)},
+			false,
+		},
+		// it's after
+		{
+			time.Now().Add(+2 * time.Minute),
+			TimePeriod{From: time.Now().Add(-1 * time.Minute), To: time.Now().Add(+1 * time.Minute)},
+			false,
+		},
+	} {
+		got := tc.timePeriod.Includes(tc.pointInTime)
+		if tc.expected != got {
+			t.Fatalf("expected %v, got %v", tc.expected, got)
+		}
+	}
+}
+
 func TestParseWeekdays(t *testing.T) {
 	for _, tc := range []struct {
 		given    string
